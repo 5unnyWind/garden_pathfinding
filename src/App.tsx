@@ -2,11 +2,25 @@ import { useState, useEffect } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
-import { threePathfinding } from "three-pathfinding";
+import { Pathfinding, PathfindingHelper } from "three-pathfinding";
 import "./App.css";
+import { Canvas } from "@react-three/fiber";
+import Garden from "./Garden";
 
 function App() {
   useEffect(() => {
+    // let navmesh;
+
+    // const loader = new GLTFLoader();
+    // loader.load( 'navmesh.glb', ({scene}) => {
+    // 	scene.traverse((node) => {
+    // 		if (node.isMesh) navmesh = node;
+    // 		console.log(navmesh)
+    // 	});
+    // }, undefined, (e) => {
+    // 	console.error(e);
+    // });
+
     const Color = {
       GROUND: new THREE.Color(0x606060).convertSRGBToLinear().getHex(),
       NAVMESH: new THREE.Color(0xffffff).convertSRGBToLinear().getHex(),
@@ -22,8 +36,8 @@ function App() {
     const playerPosition = new THREE.Vector3(-3.5, 0.5, 5.5);
     const targetPosition = new THREE.Vector3();
 
-    const pathfinder = new threePathfinding.Pathfinding();
-    const helper = new threePathfinding.PathfindingHelper();
+    const pathfinder = new Pathfinding();
+    const helper = new PathfindingHelper();
 
     const clock = new THREE.Clock();
     const mouse = new THREE.Vector2();
@@ -62,7 +76,7 @@ function App() {
     scene.add(directionalLight);
 
     init();
-    // animate();
+    animate();
 
     function init() {
       const gltfLoader = new GLTFLoader();
@@ -70,7 +84,8 @@ function App() {
       gltfLoader.load(
         "/garden.glb",
         function (gltf) {
-          const levelMesh = gltf.scene.getObjectByName("Plane008");
+          const levelMesh = gltf.scene.getObjectByName("Plane001_1");
+          console.log(levelMesh);
           const levelMat = new THREE.MeshStandardMaterial({
             color: Color.GROUND,
             flatShading: true,
@@ -85,14 +100,14 @@ function App() {
       );
 
       gltfLoader.load(
-        "meshes/garden.nav.glb",
+        "/navmesh.glb",
         function (gltf) {
           const _navmesh = gltf.scene.getObjectByName(
             "SampleScene_Exported_NavMesh"
           );
           console.log(_navmesh);
           console.time("createZone()");
-          const zone = THREE.Pathfinding.createZone(_navmesh.geometry);
+          const zone = Pathfinding.createZone(_navmesh.geometry);
           console.timeEnd("createZone()");
 
           pathfinder.setZoneData(ZONE, zone);
@@ -245,7 +260,11 @@ function App() {
       }
     }
   });
-  return <div className="App"></div>;
+  return (
+    <div className="App">
+
+    </div>
+  );
 }
 
 export default App;
