@@ -96,7 +96,7 @@ function App() {
           window.level = level;
           scene.add(level);
         },
-        null
+        null 
       );
 
       gltfLoader.load(
