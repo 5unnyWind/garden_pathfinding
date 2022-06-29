@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
-import {GLTFLoader} from "three/examples/jsm/loaders/GLTFLoader";
-import threePathfinding from "three-pathfinding";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
+import { threePathfinding } from "three-pathfinding";
 import "./App.css";
 
 function App() {
@@ -54,76 +54,196 @@ function App() {
     controls.enableDamping = true;
     controls.dampingFactor = 0.2;
 
-    
-		const ambient = new THREE.AmbientLight(0x101030);
-		scene.add(ambient);
+    const ambient = new THREE.AmbientLight(0x101030);
+    scene.add(ambient);
 
-		const directionalLight = new THREE.DirectionalLight(0xFFEEDD);
-		directionalLight.position.set(0, 0.5, 0.5);
-		scene.add(directionalLight);
+    const directionalLight = new THREE.DirectionalLight(0xffeedd);
+    directionalLight.position.set(0, 0.5, 0.5);
+    scene.add(directionalLight);
 
-    
-		init();
-		// animate();
+    init();
+    // animate();
 
-		function init() {
+    function init() {
+      const gltfLoader = new GLTFLoader();
 
-			const gltfLoader = new GLTFLoader();
+      gltfLoader.load(
+        "/garden.glb",
+        function (gltf) {
+          const levelMesh = gltf.scene.getObjectByName("Plane008");
+          const levelMat = new THREE.MeshStandardMaterial({
+            color: Color.GROUND,
+            flatShading: true,
+            roughness: 1,
+            metalness: 0,
+          });
+          level = new THREE.Mesh(levelMesh.geometry, levelMat);
+          window.level = level;
+          scene.add(level);
+        },
+        null
+      );
 
-			gltfLoader.load('/garden.glb', function (gltf) {
+      gltfLoader.load(
+        "meshes/garden.nav.glb",
+        function (gltf) {
+          const _navmesh = gltf.scene.getObjectByName(
+            "SampleScene_Exported_NavMesh"
+          );
+          console.log(_navmesh);
+          console.time("createZone()");
+          const zone = THREE.Pathfinding.createZone(_navmesh.geometry);
+          console.timeEnd("createZone()");
 
-				const levelMesh = gltf.scene.getObjectByName('Plane');
-				const levelMat = new THREE.MeshStandardMaterial({
-					color: Color.GROUND,
-					flatShading: true,
-					roughness: 1,
-					metalness: 0
-				});
-				level = new THREE.Mesh(levelMesh.geometry, levelMat);
-				window.level = level;
-				scene.add(level);
-			}, null);
+          pathfinder.setZoneData(ZONE, zone);
 
-			gltfLoader.load('meshes/tubes22.nav.glb', function (gltf) {
+          const navWireframe = new THREE.Mesh(
+            _navmesh.geometry,
+            new THREE.MeshBasicMaterial({
+              color: 0x808080,
+              wireframe: true,
+            })
+          );
+          navWireframe.position.y = OFFSET / 2;
+          scene.add(navWireframe);
 
-				const _navmesh = gltf.scene.getObjectByName('Navmesh');
-				console.log(_navmesh)
-				console.time('createZone()');
-				const zone = THREE.Pathfinding.createZone(_navmesh.geometry);
-				console.timeEnd('createZone()');
+          navmesh = new THREE.Mesh(
+            _navmesh.geometry,
+            new THREE.MeshBasicMaterial({
+              color: Color.NAVMESH,
+              opacity: 0.75,
+              transparent: true,
+            })
+          );
 
-				pathfinder.setZoneData(ZONE, zone);
+          scene.add(navmesh);
 
-				const navWireframe = new THREE.Mesh(_navmesh.geometry, new THREE.MeshBasicMaterial({
-					color: 0x808080,
-					wireframe: true
-				}));
-				navWireframe.position.y = OFFSET / 2;
-				scene.add(navWireframe);
+          // Set the player's navigation mesh group
+          groupID = pathfinder.getGroup(ZONE, playerPosition);
+        },
+        null
+      );
 
-				navmesh = new THREE.Mesh(_navmesh.geometry, new THREE.MeshBasicMaterial({
-					color: Color.NAVMESH,
-					opacity: 0.75,
-					transparent: true
-				}));
+      helper
+        .setPlayerPosition(new THREE.Vector3(-3.5, 0.5, 5.5))
+        .setTargetPosition(new THREE.Vector3(-3.5, 0.5, 5.5));
 
-				scene.add(navmesh);
+      document.addEventListener("pointerdown", onDocumentPointerDown, false);
+      document.addEventListener("pointerup", onDocumentPointerUp, false);
+      window.addEventListener("resize", onWindowResize, false);
+    }
 
-				// Set the player's navigation mesh group
-				groupID = pathfinder.getGroup(ZONE, playerPosition);
+    function onDocumentPointerDown(event) {
+      mouseDown.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouseDown.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    }
 
-			}, null);
+    function onDocumentPointerUp(event) {
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
-			helper
-				.setPlayerPosition(new THREE.Vector3(-3.5, 0.5, 5.5))
-				.setTargetPosition(new THREE.Vector3(-3.5, 0.5, 5.5));
+      if (
+        Math.abs(mouseDown.x - mouse.x) > 0 ||
+        Math.abs(mouseDown.y - mouse.y) > 0
+      )
+        return; // Prevent unwanted click when rotate camera.
 
-			document.addEventListener('pointerdown', onDocumentPointerDown, false);
-			document.addEventListener('pointerup', onDocumentPointerUp, false);
-			window.addEventListener('resize', onWindowResize, false);
+      camera.updateMatrixWorld();
 
-		}
+      raycaster.setFromCamera(mouse, camera);
 
+      const intersects = raycaster.intersectObject(navmesh);
+
+      if (!intersects.length) return;
+
+      targetPosition.copy(intersects[0].point);
+
+      helper.reset().setPlayerPosition(playerPosition);
+
+      // Teleport on ctrl/cmd click or RMB.
+      if (event.metaKey || event.ctrlKey || event.button === 2) {
+        path = null;
+        groupID = pathfinder.getGroup(ZONE, targetPosition, true);
+        const closestNode = pathfinder.getClosestNode(
+          playerPosition,
+          ZONE,
+          groupID,
+          true
+        );
+
+        helper.setPlayerPosition(playerPosition.copy(targetPosition));
+        if (closestNode) helper.setNodePosition(closestNode.centroid);
+
+        return;
+      }
+
+      const targetGroupID = pathfinder.getGroup(ZONE, targetPosition, true);
+      const closestTargetNode = pathfinder.getClosestNode(
+        targetPosition,
+        ZONE,
+        targetGroupID,
+        true
+      );
+
+      helper.setTargetPosition(targetPosition);
+      if (closestTargetNode) helper.setNodePosition(closestTargetNode.centroid);
+
+      // Calculate a path to the target and store it
+      path = pathfinder.findPath(playerPosition, targetPosition, ZONE, groupID);
+
+      if (path && path.length) {
+        helper.setPath(path);
+      } else {
+        const closestPlayerNode = pathfinder.getClosestNode(
+          playerPosition,
+          ZONE,
+          groupID
+        );
+        const clamped = new THREE.Vector3();
+
+        // TODO(donmccurdy): Don't clone targetPosition, fix the bug.
+        pathfinder.clampStep(
+          playerPosition,
+          targetPosition.clone(),
+          closestPlayerNode,
+          ZONE,
+          groupID,
+          clamped
+        );
+
+        helper.setStepPosition(clamped);
+      }
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      tick(clock.getDelta());
+      renderer.render(scene, camera);
+    }
+
+    function tick(dt) {
+      if (!level || !(path || []).length) return;
+
+      let targetPosition = path[0];
+      const velocity = targetPosition.clone().sub(playerPosition);
+
+      if (velocity.lengthSq() > 0.05 * 0.05) {
+        velocity.normalize();
+        // Move player to target
+        playerPosition.add(velocity.multiplyScalar(dt * SPEED));
+        helper.setPlayerPosition(playerPosition);
+      } else {
+        // Remove node from the path we calculated
+        path.shift();
+      }
+    }
   });
   return <div className="App"></div>;
 }
